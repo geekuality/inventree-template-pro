@@ -90,8 +90,15 @@ InvenTree Part Templates is [installed](https://docs.inventree.org/en/stable/ext
 
 Then, install the plugin using your preferred method. The easiest methods are:
 
-- The best approach, especially when using Docker, is to edit your `inventree_data/plugins.txt` file
-  to add the package name (`inventree-part-templates`). Restart InvenTree for the package to be downloaded and installed.
+- Edit your `plugins.txt` file (typically `inventree_data/plugins.txt` for Docker, or `/etc/inventree/plugins.txt` for package installs) to add:
+  ```
+  inventree-part-templates
+  ```
+  Restart InvenTree for the package to be downloaded and installed.
+- To install from this fork instead, add the following to `plugins.txt` and ensure `git` is installed on the InvenTree host:
+  ```
+  git+https://github.com/geekuality/inventree-template-pro.git
+  ```
 - Visit the `Settings / Plugin Settings / Plugins` page in the management console and install it
   from there.
 
