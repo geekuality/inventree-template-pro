@@ -7,7 +7,7 @@
 """
 
 # Typing
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 # Error reporting assistance
 import traceback
@@ -17,7 +17,7 @@ from django.utils.translation import gettext_lazy as _
 
 # Plugin imports
 from plugin import InvenTreePlugin
-from plugin.mixins import AppMixin, ReportMixin, SettingsMixin, PanelMixin, UrlsMixin
+from plugin.mixins import AppMixin, ReportMixin, SettingsMixin, UrlsMixin
 
 # InvenTree models
 from stock.models import StockItem
@@ -26,13 +26,6 @@ from part.models import Part, PartCategory
 # Django templates
 from django.template import Context, Template
 
-# InvenTree views
-from part.views import PartDetail, CategoryDetail
-from stock.views import StockItemDetail
-
-# Django views
-from django.views.generic import UpdateView
-
 # API support for URLs
 from django.urls import path
 from django.http import HttpResponse, HttpRequest, JsonResponse
@@ -40,11 +33,7 @@ from django.http import HttpResponse, HttpRequest, JsonResponse
 # Plugin version number
 from .version import PLUGIN_VERSION
 
-# User support
-from django.contrib.auth.models import User
-from typing import cast
-
-class PartTemplatesPlugin(AppMixin, PanelMixin, UrlsMixin, ReportMixin, SettingsMixin, InvenTreePlugin):
+class PartTemplatesPlugin(AppMixin, UrlsMixin, ReportMixin, SettingsMixin, InvenTreePlugin):
     """
     A plugin for InvenTree that extends reporting with customizable part / category templates.
     """
@@ -60,24 +49,6 @@ class PartTemplatesPlugin(AppMixin, PanelMixin, UrlsMixin, ReportMixin, Settings
     # plugin custom settings
     MAX_TEMPLATES = 5
     SETTINGS = {
-        'EDITING': {
-            'name': _('Panel editing'),
-            'description': _('Rules for when Part Templates may be edited in a Part Templates panel.'),
-            'choices': [
-                ('superuser',_('Only if user is Superuser')),
-                ('always',_('Always allow Part Template editing')),
-                ('never',_('Never allow Part Template editing'))],
-            'default': 'superuser',
-        },
-        'VIEWING': {
-            'name': _('Panel viewing'),
-            'description': _('Rules for when rendered context templates are shown in a Part Templates panel.'),
-            'choices': [
-                ('superuser',_('Only if user is Superuser')),
-                ('always',_('Always allow Part Template viewing')),
-                ('never',_('Never allow Part Template viewing'))],
-            'default': 'superuser',
-        },
         'T1_KEY': {
             'name': _('Template 1: Context property name'),
             'description': _('Name of the context property (used in templates such as "part_templates.my_name.")'),
@@ -168,183 +139,6 @@ class PartTemplatesPlugin(AppMixin, PanelMixin, UrlsMixin, ReportMixin, Settings
             None
         """
         self._add_context(model_instance, context)
-
-    #
-    # Panel mixin entrypoints
-    #
-
-    def get_panel_context(self, view: UpdateView, request: HttpRequest, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Retrieves the panel context for the given view, when PartDetail or CategoryDetail and
-        settings EDITING and VIEWING indiate the panel should be shown.  The context name is
-        'part_templates' and is a list of entries one per template context variable defined in the
-        plugin settings.  Each entry contains the key name (key), the template associated with the
-        key (template), and the inherited template for the key (inherited_template).  The inherited
-        template is the template that would be used if the template on the instance was not defined.
-
-        Args:
-            view (UpdateView): The view object.  request (HtpRequest): The request object.  context
-            (Dict[str, Any]): The context dictionary.
-
-        Returns:
-            Dict[str, Any]: The updated context dictionary.
-        """
-
-        # pick up our context from the super
-        ctx = super().get_panel_context(view, request, context)
-
-        # are we providing a panel?
-        if not self._may_edit_panel(request, view) and not self._may_view_panel(request, view):
-            return ctx
-
-        # add our context
-        ctx['part_templates'] = self._get_panel_context(view.get_object())
-        ctx['part_templates_may_edit'] = self._may_edit_panel(request, view)
-        ctx['part_templates_may_view'] = self._may_view_panel(request, view)
-
-        return ctx
-
-    def get_custom_panels(self, view: UpdateView, request: HttpRequest) -> List[Any]:
-        """
-        Retrieves our custom panel, if it is enabled and on a supported view.
-
-        Args:
-            view (UpdateView): The view object.
-            request (HttpRequest): The request object.
-
-        Returns:
-            List[Any]: A list of custom panels.
-
-        """
-        panels = []
-
-        # are we providing a panel?
-        if not self._may_edit_panel(request, view) and not self._may_view_panel(request, view):
-            return panels
-
-        # add our panel
-        panels.append({
-            'title': 'Part Templates',
-            'icon': 'fa-file-alt',
-            'content_template': 'part_templates/part_detail_panel.html',
-            'javascript': 'onPartTemplatesPanelLoad();'
-        })
-
-        return panels
-
-    #
-    # private method support for panel
-    #
-
-    def _get_panel_context(self, instance: Part | PartCategory) -> List[Dict[str, str]]:
-        """
-        Get the panel context containing a list of the plugin's configured context variables, and
-        for each include the key name (key), the template associated with the key (template), and
-        the inherited template for the key (inherited_template).  The inherited template is the
-        template that would be used if the template on the instance was not defined.
-
-        Args:
-            instance (Part | PartCategory): The instance for which to retrieve the panel context.
-
-        Returns:
-            List[Dict[str, str]]: A list of dictionaries representing the panel context.
-                Each dictionary contains the following keys:
-                - 'key': The context variable name.
-                - 'template': The template associated with the context variable.
-                - 'inherited_template': The inherited template for the context variable.
-                - 'rendered_template': The template value rendered, if the part is available.
-                - 'entity': the name of the entity being edited (Part, StockItem)
-                - 'pk': The primary key of the entity object
-        """
-        context: List[Dict[str, str]] = []
-
-        # process each possible key from settings
-        for key_number in range(1, self.MAX_TEMPLATES + 1):
-            key: str = self.get_setting(f'T{key_number}_KEY')
-            default_template: str = self.get_setting(f'T{key_number}_TEMPLATE')
-
-            # determine the parent category so we can pick up what would be the inherited template
-            # if this does not override it
-            parent_category = instance.category if isinstance(instance, Part) else instance.parent
-
-            # get the template metadata, which is a dictionary of context_name: template for this instance
-            #instance = Part.objects.get(pk=instance.pk)
-            if instance.metadata and instance.metadata.get(self.METADATA_PARENT) and instance.metadata[self.METADATA_PARENT].get(self.METADATA_TEMPLATE_KEY):
-                metadata_templates = instance.metadata[self.METADATA_PARENT][self.METADATA_TEMPLATE_KEY]
-            else:
-                metadata_templates = {}
-
-            # get the instance-specific template for this key
-            template = metadata_templates.get(key, '')
-
-            # get the inherited template (ignoring our current template, this is what it would be if
-            # the template on this instance was not defined)
-            inherited_template = self._find_category_template(parent_category, key, default_template)
-
-            # render the part using the context if we have one
-            rendered_template = ""
-            if isinstance(instance, Part):
-                try:
-                    rendered_template = self._apply_template(instance, None, template if template else inherited_template)
-                except Exception as e:      # pylint: disable=broad-except
-                    rendered_template = f'({_("error")}: {str(e)})'
-
-            # if the user has defined a key (context variable name), add to our context
-            if key:
-                context.append({
-                    'key': key,
-                    'template': template,
-                    'inherited_template': inherited_template,
-                    'rendered_template': rendered_template,
-                    'entity': 'part' if isinstance(instance, Part) else 'category',
-                    'pk': instance.pk,
-                })
-
-        return context
-
-    def _may_edit_panel(self, request: HttpRequest, view: UpdateView) -> bool:
-        """
-        Determines whether the panel can be edited based on the current settings and user permissions.
-
-        Args:
-            request (HttpRequest): The HTTP request object.
-
-        Returns:
-            bool: True if the panel can be edited, False otherwise.
-        """
-        # check if settings allow editing
-        if self.get_setting('EDITING') == 'never':
-            return False
-        if self.get_setting('EDITING') == 'superuser' and not cast(User, request.user).is_superuser:
-            return False
-
-        # make sure it's a view we support editing on
-        if not isinstance(view, (PartDetail, CategoryDetail)):
-            return False
-
-        return True
-
-    def _may_view_panel(self, request: HttpRequest, view: UpdateView) -> bool:
-        """
-        Determines whether the panel can be viewed based on the user's permissions and settings.
-
-        Args:
-            request (HttpRequest): The HTTP request object.
-
-        Returns:
-            bool: True if the panel can be viewed, False otherwise.
-        """
-        # check if settings allow viewing
-        if self.get_setting('VIEWING') == 'never':
-            return False
-        if self.get_setting('VIEWING') == 'superuser' and not cast(User, request.user).is_superuser:
-            return False
-
-        # make sure it's a view we support viewing on
-        if not isinstance(view, (PartDetail, StockItemDetail)):
-            return False
-
-        return True
 
     #
     # Urls mixin entrypoints
