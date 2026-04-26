@@ -88,19 +88,13 @@ that might reference properties that do not exist on all children.
 
 InvenTree Part Templates is [installed](https://docs.inventree.org/en/stable/extend/plugins/install/) like most plugins. First, verify that plugins are enabled by visiting the `Settings / Plugin Settings / Plugins` page, and ensure the `Enable URL integration`, `Enable app integration`, and `Check plugins on startup` settings (if using Docker containers) are all enabled.
 
-Then, install the plugin using your preferred method. The easiest methods are:
+Then, install the plugin by adding the following to your `plugins.txt` file (typically `inventree_data/plugins.txt` for Docker, or `/etc/inventree/plugins.txt` for package installs). Ensure `git` is installed on the InvenTree host, then restart InvenTree:
 
-- Edit your `plugins.txt` file (typically `inventree_data/plugins.txt` for Docker, or `/etc/inventree/plugins.txt` for package installs) to add:
-  ```
-  inventree-part-templates
-  ```
-  Restart InvenTree for the package to be downloaded and installed.
-- To install from this fork instead, add the following to `plugins.txt` and ensure `git` is installed on the InvenTree host:
-  ```
-  git+https://github.com/geekuality/inventree-template-pro.git
-  ```
-- Visit the `Settings / Plugin Settings / Plugins` page in the management console and install it
-  from there.
+```
+git+https://github.com/geekuality/inventree-template-pro.git
+```
+
+Alternatively, visit the `Settings / Plugin Settings / Plugins` page in the management console and install it from there using the same URL.
 
 Once installed, verify the installation by checking the `Settings / Plugin Settings / Plugins` page. There should be no errors from plugins at the bottom of the page, and the `PartTemplatesPlugin` should be listed.
 
